@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { useMemo, useRef, useState } from 'react'
 import { Line, useCursor, MeshDistortMaterial } from '@react-three/drei'
 import { useRouter } from 'next/navigation'
+import { Color } from 'three'
 
 export const Blob = ({ route = '/', ...props }) => {
   const router = useRouter()
@@ -16,9 +17,76 @@ export const Blob = ({ route = '/', ...props }) => {
       onClick={() => router.push(route)}
       onPointerOver={() => hover(true)}
       onPointerOut={() => hover(false)}
-      {...props}>
+      {...props}
+    >
       <sphereGeometry args={[1, 64, 64]} />
       <MeshDistortMaterial roughness={0.5} color={hovered ? 'hotpink' : '#1fb2f5'} />
+    </mesh>
+  )
+}
+
+const vertexShader = `uniform float u_time;
+
+varying vec2 vUv;
+varying float vZ;
+varying float vX;
+
+void main() {
+  vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+  modelPosition.y += sin(modelPosition.x * 10.0 + u_time * 12.0) * 0.2;
+  
+  // Uncomment the code and hit the refresh button below for a more complex effect 🪄
+  modelPosition.y += sin(modelPosition.z * 6.0 + u_time * 2.0) * 0.1;
+  modelPosition.y += sin(modelPosition.z * 2.0 + u_time * -2.4) * 0.3;
+  modelPosition.x += sin(modelPosition.z * 2.0 + u_time * 1.4) * 0.2;
+
+  vec4 viewPosition = viewMatrix * modelPosition;
+  vec4 projectedPosition = projectionMatrix * viewPosition;
+  vZ = modelPosition.y;
+  vX = modelPosition.x;
+
+  gl_Position = projectedPosition;
+}`
+
+const fragmentShader = `uniform vec3 u_colorA;
+uniform vec3 u_colorB;
+uniform vec3 u_colorC;
+varying float vZ;
+varying float vX;
+
+
+void main() {
+  vec3 color = mix(u_colorA, u_colorB, vZ * 2.0 + 0.5); 
+  vec3 color2 = mix(color, u_colorC, vX * .3 );
+  gl_FragColor = vec4(color2, 1.0);
+  
+}`
+
+export const MovingPlane = ({ route = '/', ...props }) => {
+  const router = useRouter()
+  const [hovered, hover] = useState(false)
+  const mesh = useRef()
+  const resolution = useMemo(() => new THREE.Vector2(), [])
+  const uniforms = useMemo(
+    () => ({
+      u_time: {
+        value: 0.0,
+      },
+      u_colorA: { value: new Color('#FFE486') },
+      u_colorB: { value: new Color('#FEB3D9') },
+      u_colorC: { value: new Color('#000000') },
+    }),
+    [],
+  )
+  useFrame((state) => {
+    const { clock } = state
+    mesh.current.material.uniforms.u_time.value = clock.getElapsedTime()
+  })
+  useCursor(hovered)
+  return (
+    <mesh ref={mesh} position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={1.5}>
+      <planeGeometry args={[7, 7, 64, 64]} />
+      <shaderMaterial fragmentShader={fragmentShader} vertexShader={vertexShader} uniforms={uniforms} />
     </mesh>
   )
 }
